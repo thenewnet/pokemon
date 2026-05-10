@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#dc0a2d" />
+<title>Pokédex — Tra cứu Pokémon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #dc0a2d;
+    --red-dark: #a50820;
+    --red-darker: #6b0515;
+    --screen: #c8d4a8;
+    --screen-dark: #6b8a4a;
+    --screen-shadow: #4a6233;
+    --bg: #1a1a1f;
+    --bg-soft: #25252c;
+    --bg-card: #2f2f38;
+    --ink: #f4f4f0;
+    --muted: #a0a0a8;
+    --gold: #f7c948;
+    --led-on: #4ade80;
+    --led-off: #1a3a1f;
+    --border: #3a3a44;
+
+    /* Type colors */
+    --t-normal: #a8a878; --t-fire: #f08030; --t-water: #6890f0; --t-electric: #f8d030;
+    --t-grass: #78c850; --t-ice: #98d8d8; --t-fighting: #c03028; --t-poison: #a040a0;
+    --t-ground: #e0c068; --t-flying: #a890f0; --t-psychic: #f85888; --t-bug: #a8b820;
+    --t-rock: #b8a038; --t-ghost: #705898; --t-dragon: #7038f8; --t-dark: #705848;
+    --t-steel: #b8b8d0; --t-fairy: #ee99ac;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at top, #2a1518 0%, #1a1a1f 50%, #0a0a0d 100%);
+  }
+
+  /* Subtle scanline overlay for retro vibe */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 3px);
+    z-index: 9999;
+    mix-blend-mode: overlay;
+  }
+
+  .app { max-width: 480px; margin: 0 auto; padding: 0 0 80px; }
+
+  /* ========== HEADER (Pokédex top) ========== */
+  .header {
+    background: linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%);
+    padding: 14px 16px 18px;
+    border-bottom: 4px solid var(--red-darker);
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .big-led {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #6cb6ff 0%, #2872c8 50%, #134380 100%);
+    box-shadow:
+      inset 2px 2px 4px rgba(255,255,255,0.4),
+      inset -2px -2px 4px rgba(0,0,0,0.3),
+      0 0 8px rgba(108,182,255,0.5),
+      0 0 0 3px #fff,
+      0 0 0 5px var(--red-darker);
+    flex-shrink: 0;
+    animation: blink 3s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  .small-leds { display: flex; gap: 6px; }
+  .led {
+    width: 10px; height: 10px; border-radius: 50%;
+    box-shadow: inset 1px 1px 2px rgba(255,255,255,0.4), inset -1px -1px 2px rgba(0,0,0,0.3);
+  }
+  .led.red { background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a); }
+  .led.yellow { background: radial-gradient(circle at 30% 30%, #ffe066, #f59f00); }
+  .led.green { background: radial-gradient(circle at 30% 30%, #8ce99a, #2f9e44); }
+
+  .title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 13px;
+    color: #fff;
+    text-shadow: 2px 2px 0 var(--red-darker);
+    letter-spacing: 1px;
+    margin-left: auto;
+  }
+
+  /* ========== SEARCH BAR (LCD screen style) ========== */
+  .search-wrap {
+    background: var(--screen);
+    border: 3px solid var(--screen-shadow);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    position: relative;
+  }
+  .search-wrap::before {
+    content: ""; position: absolute;
+    top: -2px; left: -2px; right: -2px; bottom: -2px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.15) 50%, transparent 60%);
+    pointer-events: none;
+  }
+  .search-input {
+    flex: 1; min-width: 0;
+    background: transparent;
+    border: none; outline: none;
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--screen-shadow);
+    padding: 4px 0;
+  }
+  .search-input::placeholder { color: var(--screen-dark); opacity: 0.6; }
+  .search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+  .mic-btn {
+    background: var(--red-dark);
+    border: 2px solid var(--red-darker);
+    color: #fff;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.1s, background 0.2s;
+  }
+  .mic-btn:active { transform: scale(0.92); }
+  .mic-btn.listening {
+    background: var(--gold);
+    border-color: #b08820;
+    animation: pulse-mic 1s ease-in-out infinite;
+  }
+  @keyframes pulse-mic {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(247,201,72,0.7); }
+    50% { box-shadow: 0 0 0 12px rgba(247,201,72,0); }
+  }
+  .mic-btn svg { width: 18px; height: 18px; }
+
+  /* ========== TYPE FILTER ========== */
+  .filters {
+    padding: 10px 16px 6px;
+    display: flex; gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--border);
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    background: var(--bg-card);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    text-transform: capitalize;
+    transition: all 0.2s;
+  }
+  .chip.active {
+    background: var(--red);
+    color: #fff;
+    border-color: var(--red-darker);
+    box-shadow: 0 2px 6px rgba(220,10,45,0.4);
+  }
+
+  /* ========== POKEMON GRID ========== */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  @media (min-width: 380px) {
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  }
+  @media (min-width: 600px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 8px 8px 10px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s, border-color 0.15s;
+    aspect-ratio: 1 / 1.15;
+    display: flex; flex-direction: column;
+  }
+  .card:active { transform: scale(0.96); }
+  .card::before {
+    content: ""; position: absolute;
+    inset: 0;
+    background: var(--card-bg, linear-gradient(135deg, rgba(255,255,255,0.05), transparent));
+    opacity: 0.85;
+    z-index: 0;
+  }
+  .card::after {
+    content: ""; position: absolute;
+    right: -20px; bottom: -20px;
+    width: 80px; height: 80px;
+    border: 8px solid rgba(255,255,255,0.06);
+    border-radius: 50%;
+    z-index: 0;
+  }
+  .card-num {
+    position: relative; z-index: 1;
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    color: rgba(255,255,255,0.5);
+    align-self: flex-end;
+    line-height: 1;
+  }
+  .card-img {
+    position: relative; z-index: 1;
+    width: 100%; flex: 1;
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));
+    margin: 4px 0;
+  }
+  .card-name {
+    position: relative; z-index: 1;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    text-align: center;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card-types {
+    position: relative; z-index: 1;
+    display: flex; gap: 4px; justify-content: center;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+  .type-pill {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+  }
+
+  /* ========== LOADING / EMPTY ========== */
+  .status {
+    text-align: center;
+    padding: 40px 16px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    display: inline-block;
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--red);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .load-more {
+    text-align: center;
+    padding: 16px;
+  }
+  .load-more button {
+    background: var(--red);
+    color: #fff;
+    border: 2px solid var(--red-darker);
+    padding: 10px 24px;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 var(--red-darker);
+  }
+  .load-more button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--red-darker); }
+  .load-more button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ========== DETAIL MODAL ========== */
+  .modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    display: none;
+    overflow-y: auto;
+    backdrop-filter: blur(6px);
+  }
+  .modal.open { display: block; animation: fade 0.2s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal-content {
+    max-width: 480px; margin: 0 auto;
+    min-height: 100vh;
+    background: var(--bg);
+    position: relative;
+    animation: slide-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes slide-up {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .detail-hero {
+    background: var(--hero-bg, linear-gradient(135deg, #6890f0, #4a70d8));
+    padding: 16px 16px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .detail-hero::after {
+    content: "";
+    position: absolute;
+    right: -40px; bottom: -40px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(255,255,255,0.25), transparent 60%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .detail-hero::before {
+    content: "";
+    position: absolute;
+    top: -30px; left: -30px;
+    width: 100px; height: 100px;
+    border: 6px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .detail-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 0;
+    position: relative; z-index: 2;
+  }
+  .close-btn {
+    background: rgba(0,0,0,0.25);
+    border: none;
+    color: #fff;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .detail-num {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: rgba(255,255,255,0.85);
+    font-weight: 700;
+  }
+
+  .detail-name-block {
+    padding: 8px 0 4px;
+    position: relative; z-index: 2;
+  }
+  .detail-name {
+    font-size: 32px;
+    font-weight: 800;
+    color: #fff;
+    margin: 0;
+    line-height: 1.1;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    text-transform: capitalize;
+  }
+  .detail-types-row {
+    display: flex; gap: 6px; margin-top: 8px;
+  }
+  .detail-types-row .type-pill {
+    font-size: 11px; padding: 4px 12px;
+    background: rgba(255,255,255,0.25) !important;
+    backdrop-filter: blur(4px);
+  }
+
+  .detail-img-wrap {
+    position: relative; z-index: 2;
+    text-align: center;
+    margin-top: 8px;
+    padding-bottom: 0;
+  }
+  .detail-img {
+    width: 220px; height: 220px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.3));
+    margin-bottom: -20px;
+  }
+
+  .detail-body {
+    background: var(--bg);
+    border-radius: 24px 24px 0 0;
+    padding: 28px 20px 40px;
+    position: relative; z-index: 3;
+    margin-top: -8px;
+  }
+
+  .section-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: var(--red);
+    margin: 0 0 12px;
+    letter-spacing: 0.5px;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .meta-cell {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 6px;
+  }
+  .meta-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .meta-value { font-family: 'VT323', monospace; font-size: 22px; color: var(--ink); margin-top: 2px; }
+
+  .stats-list { margin-bottom: 24px; }
+  .stat-row {
+    display: grid;
+    grid-template-columns: 80px 36px 1fr;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .stat-name { color: var(--muted); font-weight: 600; }
+  .stat-value { font-family: 'VT323', monospace; font-size: 18px; color: var(--ink); text-align: right; }
+  .stat-bar {
+    height: 8px;
+    background: var(--bg-card);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .stat-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--red), var(--gold));
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .desc-text {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--red);
+    padding: 12px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+    margin-bottom: 24px;
+    font-style: italic;
+  }
+
+  /* Evolution chain */
+  .evo-chain {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .evo-stage {
+    text-align: center;
+    cursor: pointer;
+    padding: 8px 4px;
+    border-radius: 8px;
+    transition: background 0.2s;
+    min-width: 80px;
+  }
+  .evo-stage:active { background: var(--bg-card); }
+  .evo-stage img {
+    width: 64px; height: 64px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+  }
+  .evo-stage-name {
+    font-size: 11px;
+    color: var(--ink);
+    text-transform: capitalize;
+    margin-top: 2px;
+    font-weight: 600;
+  }
+  .evo-stage-num {
+    font-family: 'VT323', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .evo-arrow {
+    color: var(--red);
+    font-size: 18px;
+    font-weight: 700;
+    align-self: center;
+    margin-bottom: 18px;
+  }
+  .evo-cond {
+    font-size: 9px;
+    color: var(--gold);
+    text-align: center;
+    margin: 0 4px 18px;
+    align-self: center;
+    max-width: 60px;
+    line-height: 1.2;
+  }
+
+  /* Voice toast */
+  .voice-toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    color: var(--ink);
+    padding: 12px 20px;
+    border-radius: 24px;
+    border: 2px solid var(--gold);
+    font-size: 14px;
+    z-index: 2000;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    display: none;
+    max-width: 90%;
+    text-align: center;
+  }
+  .voice-toast.show { display: block; animation: toast-in 0.2s ease; }
+  @keyframes toast-in { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+  /* Skeleton loading shimmer */
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-card) 0%, var(--bg-soft) 50%, var(--bg-card) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+    aspect-ratio: 1 / 1.15;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-top">
+      <div class="big-led" aria-hidden="true"></div>
+      <div class="small-leds">
+        <span class="led red"></span>
+        <span class="led yellow"></span>
+        <span class="led green"></span>
+      </div>
+      <div class="title">POKÉDEX</div>
+    </div>
+    <div class="search-wrap">
+      <input type="search" id="search" class="search-input" placeholder="Tìm Pokémon... (vd: pikachu, 25)" autocomplete="off" />
+      <button class="mic-btn" id="micBtn" aria-label="Tìm bằng giọng nói" title="Tìm bằng giọng nói">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- TYPE FILTERS -->
+  <div class="filters" id="filters"></div>
+
+  <!-- GRID -->
+  <main id="grid" class="grid"></main>
+
+  <div id="status" class="status"></div>
+  <div id="loadMore" class="load-more" style="display:none;">
+    <button id="loadMoreBtn">Tải thêm</button>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal" id="modal" role="dialog" aria-modal="true">
+  <div class="modal-content" id="modalContent"></div>
+</div>
+
+<!-- VOICE TOAST -->
+<div class="voice-toast" id="voiceToast"></div>
+
+<script>
+/* ============================================================
+ * Pokédex App — single-file standalone
+ * Data: PokéAPI (https://pokeapi.co)
+ * ============================================================ */
+
+const API = "https://pokeapi.co/api/v2";
+const TOTAL_TO_LOAD = 1350;   // 1025 species (Gen 9) + ~325 alternate forms (Mega, Gigantamax, regional, etc.)
+const PAGE_SIZE = 60;
+
+const TYPE_VI = {
+  normal: "Thường", fire: "Lửa", water: "Nước", electric: "Điện",
+  grass: "Cỏ", ice: "Băng", fighting: "Giác đấu", poison: "Độc",
+  ground: "Đất", flying: "Bay", psychic: "Siêu năng", bug: "Bọ",
+  rock: "Đá", ghost: "Ma", dragon: "Rồng", dark: "Bóng tối",
+  steel: "Thép", fairy: "Tiên"
+};
+
+const STAT_VI = {
+  hp: "HP", attack: "Tấn công", defense: "Phòng thủ",
+  "special-attack": "Tấn công ĐB", "special-defense": "Phòng thủ ĐB",
+  speed: "Tốc độ"
+};
+
+// Vietnamese names for popular Pokémon (Gen 1 mostly — common names from VN community)
+// For others, we fall back to capitalized English name.
+const NAME_VI = {
+  bulbasaur: "Bulbasaur", ivysaur: "Ivysaur", venusaur: "Venusaur",
+  charmander: "Charmander", charmeleon: "Charmeleon", charizard: "Charizard",
+  squirtle: "Squirtle", wartortle: "Wartortle", blastoise: "Blastoise",
+  caterpie: "Caterpie", metapod: "Metapod", butterfree: "Butterfree",
+  weedle: "Weedle", kakuna: "Kakuna", beedrill: "Beedrill",
+  pidgey: "Pidgey", pidgeotto: "Pidgeotto", pidgeot: "Pidgeot",
+  rattata: "Rattata", raticate: "Raticate",
+  spearow: "Spearow", fearow: "Fearow",
+  ekans: "Ekans", arbok: "Arbok",
+  pikachu: "Pikachu", raichu: "Raichu",
+  sandshrew: "Sandshrew", sandslash: "Sandslash",
+  jigglypuff: "Jigglypuff", wigglytuff: "Wigglytuff",
+  zubat: "Zubat", golbat: "Golbat",
+  meowth: "Meowth", persian: "Persian",
+  psyduck: "Psyduck", golduck: "Golduck",
+  abra: "Abra", kadabra: "Kadabra", alakazam: "Alakazam",
+  machop: "Machop", machoke: "Machoke", machamp: "Machamp",
+  geodude: "Geodude", graveler: "Graveler", golem: "Golem",
+  ponyta: "Ponyta", rapidash: "Rapidash",
+  slowpoke: "Slowpoke", slowbro: "Slowbro",
+  magnemite: "Magnemite", magneton: "Magneton",
+  gastly: "Gastly", haunter: "Haunter", gengar: "Gengar",
+  onix: "Onix", krabby: "Krabby", kingler: "Kingler",
+  voltorb: "Voltorb", electrode: "Electrode",
+  cubone: "Cubone", marowak: "Marowak",
+  hitmonlee: "Hitmonlee", hitmonchan: "Hitmonchan",
+  rhyhorn: "Rhyhorn", rhydon: "Rhydon",
+  chansey: "Chansey", tangela: "Tangela", kangaskhan: "Kangaskhan",
+  horsea: "Horsea", seadra: "Seadra", goldeen: "Goldeen", seaking: "Seaking",
+  staryu: "Staryu", starmie: "Starmie",
+  scyther: "Scyther", jynx: "Jynx", electabuzz: "Electabuzz", magmar: "Magmar",
+  pinsir: "Pinsir", tauros: "Tauros", magikarp: "Magikarp", gyarados: "Gyarados",
+  lapras: "Lapras", ditto: "Ditto",
+  eevee: "Eevee", vaporeon: "Vaporeon", jolteon: "Jolteon", flareon: "Flareon",
+  porygon: "Porygon", omanyte: "Omanyte", omastar: "Omastar",
+  kabuto: "Kabuto", kabutops: "Kabutops", aerodactyl: "Aerodactyl",
+  snorlax: "Snorlax",
+  articuno: "Articuno", zapdos: "Zapdos", moltres: "Moltres",
+  dratini: "Dratini", dragonair: "Dragonair", dragonite: "Dragonite",
+  mewtwo: "Mewtwo", mew: "Mew"
+};
+
+const TYPE_VARS = {
+  normal: '#a8a878', fire: '#f08030', water: '#6890f0', electric: '#f8d030',
+  grass: '#78c850', ice: '#98d8d8', fighting: '#c03028', poison: '#a040a0',
+  ground: '#e0c068', flying: '#a890f0', psychic: '#f85888', bug: '#a8b820',
+  rock: '#b8a038', ghost: '#705898', dragon: '#7038f8', dark: '#705848',
+  steel: '#b8b8d0', fairy: '#ee99ac'
+};
+
+// Display labels for alternate-form suffixes ("charizard-mega-x" → "Charizard (Mega X)")
+const FORM_VI = {
+  mega: "Mega", x: "X", y: "Y",
+  alola: "Alolan", galar: "Galarian", hisui: "Hisuian", paldea: "Paldean",
+  origin: "Origin", altered: "Altered",
+  attack: "Tấn công", defense: "Phòng thủ", speed: "Tốc độ",
+  gmax: "Gigantamax", primal: "Primal",
+  therian: "Therian", incarnate: "Incarnate",
+  sky: "Sky", land: "Land",
+  rainy: "Mưa", snowy: "Tuyết", sunny: "Nắng",
+  white: "White", black: "Black",
+  zen: "Zen", standard: "Standard",
+  blade: "Blade", shield: "Shield",
+  complete: "Complete", "10": "10%", "50": "50%",
+  dusk: "Dusk", dawn: "Dawn", ultra: "Ultra",
+  school: "School", solo: "Solo",
+  midday: "Midday", midnight: "Midnight",
+  low: "Low", high: "High", key: "Key",
+  small: "Nhỏ", large: "Lớn", super: "Super", average: "TB",
+  noice: "Noice", ice: "Băng", fire: "Lửa", water: "Nước",
+  libre: "Libre", cosplay: "Cosplay", original: "Original",
+  totem: "Totem", starter: "Starter",
+  spring: "Xuân", summer: "Hè", autumn: "Thu", winter: "Đông",
+  east: "Đông", west: "Tây",
+  hero: "Hero", "single-strike": "Single Strike", "rapid-strike": "Rapid Strike",
+  combat: "Combat", blaze: "Blaze", aqua: "Aqua",
+  "low-key": "Low Key", "amped": "Amped",
+  "ice-rider": "Ice Rider", "shadow-rider": "Shadow Rider",
+  bloodmoon: "Blood Moon", terastal: "Terastal", stellar: "Stellar",
+};
+
+// Format Pokémon name including alternate forms — e.g. "giratina-origin" → "Giratina (Origin)"
+function formatFormName(eng) {
+  const parts = eng.split("-");
+  const baseEng = parts[0];
+  const baseName = NAME_VI[baseEng] || (baseEng.charAt(0).toUpperCase() + baseEng.slice(1));
+  if (parts.length === 1) return baseName;
+  const formText = parts.slice(1)
+    .map(p => FORM_VI[p] || (p.charAt(0).toUpperCase() + p.slice(1)))
+    .join(" ");
+  return `${baseName} (${formText})`;
+}
+
+/* ============================================================
+ * State + caches
+ * ============================================================ */
+const state = {
+  allList: [],          // [{id, name, ...}] full national dex listing (incl. forms)
+  loaded: new Map(),    // id -> detailed pokemon object
+  currentTypeFilter: null,
+  formsOnly: false,     // when true, show only Mega/Gigantamax/regional/other forms (ID > 10000)
+  currentSearch: "",
+  page: 0,
+  rendered: new Set(),  // ids currently displayed
+  lang: "ja",           // "ja" = Japanese romaji (Kim Đồng convention), "en" = English
+};
+
+const cache = {
+  pokemon: new Map(),
+  species: new Map(),
+  evolution: new Map(),
+  romaji: new Map(),    // species ID -> romaji name (e.g. 136 -> "Booster" for Flareon)
+};
+
+/* ============================================================
+ * Utilities
+ * ============================================================ */
+function vietnameseName(eng) {
+  if (NAME_VI[eng]) return NAME_VI[eng];
+  return formatFormName(eng);
+}
+
+// Extract pokemon-species ID from a Pokemon detail object's species.url
+function speciesIdOf(p) {
+  const m = p?.species?.url?.match(/\/pokemon-species\/(\d+)\//);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Display name following user's chosen language. For Japanese: pulls romaji from PokéAPI species
+// (matches the convention used by NXB Kim Đồng's Pokémon manga, e.g. Flareon → "Booster").
+function displayName(p) {
+  if (state.lang === "ja") {
+    const sid = speciesIdOf(p);
+    const roma = sid != null ? cache.romaji.get(sid) : null;
+    if (roma) {
+      // Forms (ID > 10000) share their parent species' romaji — append the form suffix
+      if (p.id > 10000) {
+        const formParts = p.name.split("-").slice(1);
+        if (formParts.length) {
+          const formText = formParts.map(s => FORM_VI[s] || (s.charAt(0).toUpperCase() + s.slice(1))).join(" ");
+          return `${roma} (${formText})`;
+        }
+      }
+      return roma;
+    }
+  }
+  return vietnameseName(p.name);
+}
+
+// Bulk-fetch species → cache romaji name. Skips already-cached IDs.
+async function loadRomajiFor(details) {
+  const ids = new Set();
+  for (const p of details) {
+    if (!p) continue;
+    const sid = speciesIdOf(p);
+    if (sid != null && !cache.romaji.has(sid)) ids.add(sid);
+  }
+  if (ids.size === 0) return;
+  await Promise.all([...ids].map(async id => {
+    try {
+      const sp = await fetchJSON(`${API}/pokemon-species/${id}`, cache.species);
+      const roma = sp.names.find(n => n.language.name === "ja-roma")?.name;
+      if (roma) cache.romaji.set(id, roma);
+    } catch {}
+  }));
+}
+function pad(n) { return String(n).padStart(3, "0"); }
+function spriteUrl(id) {
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+}
+function spriteFallback(id) {
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
+}
+
+// Persistent cache (localStorage) — survives reloads, helps when network is flaky
+const LS_PREFIX = "pkdx_v1::";
+function lsGet(url) {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + url);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function lsSet(url, data) {
+  try { localStorage.setItem(LS_PREFIX + url, JSON.stringify(data)); }
+  catch {
+    // Storage full — clear oldest pokedex entries and retry once
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(LS_PREFIX));
+      keys.slice(0, Math.floor(keys.length / 2)).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(LS_PREFIX + url, JSON.stringify(data));
+    } catch {}
+  }
+}
+
+async function fetchJSON(url, cacheMap) {
+  if (cacheMap && cacheMap.has(url)) return cacheMap.get(url);
+
+  // Try persistent cache first
+  const cached = lsGet(url);
+  if (cached) {
+    if (cacheMap) cacheMap.set(url, cached);
+    return cached;
+  }
+
+  // Network with timeout + retry (iOS Safari sometimes silently hangs)
+  const MAX_ATTEMPTS = 3;
+  let lastErr;
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        cache: "force-cache",
+        headers: { "Accept": "application/json" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (cacheMap) cacheMap.set(url, data);
+      lsSet(url, data);
+      return data;
+    } catch (e) {
+      lastErr = e;
+      // Exponential backoff: 400ms, 1200ms
+      if (i < MAX_ATTEMPTS - 1) {
+        await new Promise(r => setTimeout(r, 400 * Math.pow(3, i)));
+      }
+    }
+  }
+  throw lastErr || new Error("Network error");
+}
+
+/* ============================================================
+ * Data loading
+ * ============================================================ */
+async function loadList() {
+  // Lightweight index of all entries (names + URLs). Includes alternate forms,
+  // whose IDs jump to 10001+ — we extract the real ID from the URL rather than the array index.
+  const data = await fetchJSON(`${API}/pokemon?limit=${TOTAL_TO_LOAD}&offset=0`);
+  state.allList = data.results.map(r => {
+    const id = parseInt(r.url.match(/\/pokemon\/(\d+)\//)[1], 10);
+    return { id, name: r.name, url: r.url };
+  });
+}
+
+async function loadPokemonDetail(idOrName) {
+  const key = String(idOrName).toLowerCase();
+  if (cache.pokemon.has(key)) return cache.pokemon.get(key);
+  const data = await fetchJSON(`${API}/pokemon/${key}`);
+  cache.pokemon.set(key, data);
+  cache.pokemon.set(String(data.id), data);
+  return data;
+}
+
+async function loadSpecies(idOrName) {
+  const key = String(idOrName).toLowerCase();
+  if (cache.species.has(key)) return cache.species.get(key);
+  const data = await fetchJSON(`${API}/pokemon-species/${key}`);
+  cache.species.set(key, data);
+  cache.species.set(String(data.id), data);
+  return data;
+}
+
+async function loadEvolutionChain(url) {
+  if (cache.evolution.has(url)) return cache.evolution.get(url);
+  const data = await fetchJSON(url);
+  cache.evolution.set(url, data);
+  return data;
+}
+
+/* ============================================================
+ * Rendering — grid cards
+ * ============================================================ */
+const grid = document.getElementById("grid");
+const statusEl = document.getElementById("status");
+const loadMoreEl = document.getElementById("loadMore");
+const loadMoreBtn = document.getElementById("loadMoreBtn");
+
+function setStatus(html) { statusEl.innerHTML = html; }
+function clearStatus() { statusEl.innerHTML = ""; }
+
+function getFilteredList() {
+  let list = state.allList;
+  if (state.formsOnly) list = list.filter(p => p.id > 10000);
+  const q = state.currentSearch.trim().toLowerCase();
+  if (q) {
+    // Match by id (number) or by english name (prefix match)
+    if (/^\d+$/.test(q)) {
+      const id = parseInt(q, 10);
+      list = list.filter(p => p.id === id);
+    } else {
+      list = list.filter(p => {
+        if (p.name.toLowerCase().includes(q)) return true;
+        if (vietnameseName(p.name).toLowerCase().includes(q)) return true;
+        // Match by romaji once it's cached (Pokémon must have been loaded once)
+        const sid = p.id > 10000 ? null : p.id;
+        if (sid != null) {
+          const roma = cache.romaji.get(sid);
+          if (roma && roma.toLowerCase().includes(q)) return true;
+        }
+        return false;
+      });
+    }
+  }
+  return list;
+}
+
+async function renderPage(reset = false) {
+  if (reset) {
+    grid.innerHTML = "";
+    state.rendered.clear();
+    state.page = 0;
+  }
+
+  const list = getFilteredList();
+
+  // If type filter active, we need to filter by detail data — handle separately
+  if (state.currentTypeFilter) {
+    return renderByType(list, reset);
+  }
+
+  if (list.length === 0) {
+    setStatus("Không tìm thấy Pokémon nào.");
+    loadMoreEl.style.display = "none";
+    return;
+  }
+
+  clearStatus();
+  const start = state.page * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, list.length);
+  const slice = list.slice(start, end);
+
+  // Render skeleton placeholders first
+  const skeletons = slice.map(() => {
+    const sk = document.createElement("div");
+    sk.className = "skeleton";
+    grid.appendChild(sk);
+    return sk;
+  });
+
+  // Load details concurrently (with mild throttling)
+  const details = await Promise.all(
+    slice.map(async (p, i) => {
+      try {
+        const d = await loadPokemonDetail(p.id);
+        return d;
+      } catch (e) {
+        return null;
+      }
+    })
+  );
+
+  // Pull romaji names for the page so cards render with Kim Đồng-style names
+  if (state.lang === "ja") await loadRomajiFor(details);
+
+  // Replace skeletons with real cards
+  details.forEach((d, i) => {
+    const sk = skeletons[i];
+    if (!d) {
+      sk.remove();
+      return;
+    }
+    const card = buildCard(d);
+    sk.replaceWith(card);
+    state.rendered.add(d.id);
+  });
+
+  state.page++;
+  if (end < list.length) {
+    loadMoreEl.style.display = "block";
+    loadMoreBtn.disabled = false;
+    loadMoreBtn.textContent = `Tải thêm (${list.length - end} còn lại)`;
+  } else {
+    loadMoreEl.style.display = "none";
+  }
+}
+
+async function renderByType(list, reset) {
+  // Type filter: load type endpoint once, intersect IDs, then render
+  setStatus('<div class="spinner"></div><div style="margin-top:12px;">Đang lọc theo hệ...</div>');
+  loadMoreEl.style.display = "none";
+
+  let typeData;
+  try {
+    typeData = await fetchJSON(`${API}/type/${state.currentTypeFilter}`);
+  } catch (e) {
+    setStatus(`
+      <div style="font-size:48px;">⚠️</div>
+      <div style="margin-top:8px;">Lỗi tải hệ. Kiểm tra mạng.</div>
+      <button onclick="renderPage(true)" style="margin-top:16px; padding:8px 20px; background:var(--red); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:700;">Thử lại</button>
+    `);
+    return;
+  }
+
+  const idsInType = new Set(
+    typeData.pokemon
+      .map(p => parseInt(p.pokemon.url.match(/\/pokemon\/(\d+)\//)?.[1] || "0", 10))
+      .filter(id => id > 0)
+  );
+
+  const filtered = list.filter(p => idsInType.has(p.id));
+
+  if (filtered.length === 0) {
+    setStatus("Không có Pokémon thuộc hệ này.");
+    return;
+  }
+
+  clearStatus();
+  // For type filter, just load first PAGE_SIZE
+  const slice = filtered.slice(0, PAGE_SIZE);
+  grid.innerHTML = "";
+
+  const skeletons = slice.map(() => {
+    const sk = document.createElement("div");
+    sk.className = "skeleton";
+    grid.appendChild(sk);
+    return sk;
+  });
+
+  const details = await Promise.all(
+    slice.map(p => loadPokemonDetail(p.id).catch(() => null))
+  );
+  if (state.lang === "ja") await loadRomajiFor(details);
+  details.forEach((d, i) => {
+    if (!d) { skeletons[i].remove(); return; }
+    skeletons[i].replaceWith(buildCard(d));
+    state.rendered.add(d.id);
+  });
+
+  if (filtered.length > PAGE_SIZE) {
+    setStatus(`Hiển thị ${PAGE_SIZE} / ${filtered.length} Pokémon hệ ${TYPE_VI[state.currentTypeFilter]}`);
+  }
+}
+
+function buildCard(p) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const primaryType = p.types[0]?.type.name || "normal";
+  const color = TYPE_VARS[primaryType] || "#888";
+  card.style.setProperty("--card-bg", `linear-gradient(135deg, ${color}cc, ${color}66)`);
+
+  const img = document.createElement("img");
+  img.className = "card-img";
+  img.alt = p.name;
+  img.loading = "lazy";
+  img.src = spriteUrl(p.id);
+  img.onerror = () => { img.onerror = null; img.src = spriteFallback(p.id); };
+
+  const num = document.createElement("div");
+  num.className = "card-num";
+  num.textContent = "#" + pad(p.id);
+
+  const name = document.createElement("div");
+  name.className = "card-name";
+  name.textContent = displayName(p);
+
+  const types = document.createElement("div");
+  types.className = "card-types";
+  p.types.forEach(t => {
+    const pill = document.createElement("span");
+    pill.className = "type-pill";
+    pill.style.background = TYPE_VARS[t.type.name];
+    pill.textContent = TYPE_VI[t.type.name] || t.type.name;
+    types.appendChild(pill);
+  });
+
+  card.append(num, img, name, types);
+  card.addEventListener("click", () => openDetail(p.id));
+  return card;
+}
+
+/* ============================================================
+ * Detail modal
+ * ============================================================ */
+const modal = document.getElementById("modal");
+const modalContent = document.getElementById("modalContent");
+
+async function openDetail(id) {
+  modal.classList.add("open");
+  document.body.style.overflow = "hidden";
+  modalContent.innerHTML = `
+    <div style="padding:60px 20px; text-align:center; color: var(--muted);">
+      <div class="spinner"></div>
+      <div style="margin-top:16px; font-size:14px;">Đang tải...</div>
+      <button onclick="closeDetail()" style="margin-top:20px; padding:8px 16px; background:var(--bg-card); color:var(--ink); border:1px solid var(--border); border-radius:8px; cursor:pointer;">Đóng</button>
+    </div>
+  `;
+  modalContent.scrollTop = 0;
+  modal.scrollTop = 0;
+
+  try {
+    const p = await loadPokemonDetail(id);
+    // Forms (ID 10001+) share their parent species — resolve via the URL embedded in the Pokémon detail
+    let sp = null;
+    try { sp = await fetchJSON(p.species.url, cache.species); } catch { /* render without species */ }
+    // Cache romaji name for this species so any other view of it (incl. evolution stages) picks it up
+    if (sp) {
+      const sid = speciesIdOf(p);
+      const roma = sp.names.find(n => n.language.name === "ja-roma")?.name;
+      if (sid != null && roma) cache.romaji.set(sid, roma);
+    }
+    let evoChain = null;
+    if (sp?.evolution_chain?.url) {
+      try { evoChain = await loadEvolutionChain(sp.evolution_chain.url); } catch {}
+    }
+    // Pre-cache romaji for evolution stages too, so the evo strip shows correct names
+    if (state.lang === "ja" && evoChain) {
+      const stageIds = flattenEvolution(evoChain.chain).map(s => s.id);
+      const fakeDetails = stageIds.map(id => ({ id, species: { url: `${API}/pokemon-species/${id}/` } }));
+      await loadRomajiFor(fakeDetails);
+    }
+    renderDetail(p, sp, evoChain);
+  } catch (e) {
+    modalContent.innerHTML = `
+      <div style="padding:60px 20px; text-align:center; color: var(--muted);">
+        <div style="font-size:48px;">⚠️</div>
+        <div style="margin-top:16px;">Lỗi tải dữ liệu</div>
+        <button onclick="closeDetail()" style="margin-top:20px; padding:8px 16px; background:var(--red); color:#fff; border:none; border-radius:8px; cursor:pointer;">Đóng</button>
+      </div>
+    `;
+  }
+}
+
+function closeDetail() {
+  modal.classList.remove("open");
+  document.body.style.overflow = "";
+}
+window.closeDetail = closeDetail;
+
+function renderDetail(p, sp, evoChain) {
+  const primaryType = p.types[0]?.type.name || "normal";
+  const color = TYPE_VARS[primaryType];
+  const heroBg = `linear-gradient(135deg, ${color}, ${color}99 50%, ${color}66)`;
+
+  // Pick a Vietnamese-friendly description: prefer English (since no VN entry), strip line breaks
+  let descText = "";
+  let genusEn = "";
+  if (sp) {
+    const enEntry = sp.flavor_text_entries.find(e => e.language.name === "en");
+    if (enEntry) descText = enEntry.flavor_text.replace(/\f|\n|\r/g, " ").replace(/\s+/g, " ").trim();
+    genusEn = sp.genera.find(g => g.language.name === "en")?.genus || "";
+  }
+
+  // Build evolution
+  let evoHtml = "";
+  if (evoChain) {
+    const stages = flattenEvolution(evoChain.chain);
+    if (stages.length > 1) {
+      const parts = [];
+      for (let i = 0; i < stages.length; i++) {
+        const s = stages[i];
+        parts.push(`
+          <div class="evo-stage" data-id="${s.id}" onclick="openDetail(${s.id})">
+            <img src="${spriteUrl(s.id)}" onerror="this.src='${spriteFallback(s.id)}'" loading="lazy" alt="${s.name}" />
+            <div class="evo-stage-num">#${pad(s.id)}</div>
+            <div class="evo-stage-name">${displayName({ id: s.id, name: s.name, species: { url: `${API}/pokemon-species/${s.id}/` } })}</div>
+          </div>
+        `);
+        if (i < stages.length - 1) {
+          const condText = stages[i + 1].condition || "";
+          parts.push(`<div class="evo-cond">→${condText ? "<br>" + condText : ""}</div>`);
+        }
+      }
+      evoHtml = `
+        <h3 class="section-title">TIẾN HÓA</h3>
+        <div class="evo-chain">${parts.join("")}</div>
+      `;
+    }
+  }
+
+  modalContent.innerHTML = `
+    <div class="detail-hero" style="--hero-bg: ${heroBg}; background: ${heroBg};">
+      <div class="detail-top">
+        <button class="close-btn" onclick="closeDetail()" aria-label="Đóng">×</button>
+        <div class="detail-num">#${pad(p.id)}</div>
+      </div>
+      <div class="detail-name-block">
+        <h1 class="detail-name">${displayName(p)}</h1>
+        <div class="detail-types-row">
+          ${p.types.map(t => `<span class="type-pill" style="background:${TYPE_VARS[t.type.name]}cc">${TYPE_VI[t.type.name] || t.type.name}</span>`).join("")}
+        </div>
+      </div>
+      <div class="detail-img-wrap">
+        <img class="detail-img" src="${spriteUrl(p.id)}" onerror="this.src='${spriteFallback(p.id)}'" alt="${p.name}" />
+      </div>
+    </div>
+
+    <div class="detail-body">
+      ${descText ? `<div class="desc-text">${descText}${genusEn ? ` <span style="display:block; margin-top:6px; color:var(--muted); font-style:normal; font-size:11px;">— ${genusEn}</span>` : ""}</div>` : ""}
+
+      <h3 class="section-title">THÔNG SỐ</h3>
+      <div class="meta-grid">
+        <div class="meta-cell">
+          <div class="meta-label">Chiều cao</div>
+          <div class="meta-value">${(p.height / 10).toFixed(1)} m</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">Cân nặng</div>
+          <div class="meta-value">${(p.weight / 10).toFixed(1)} kg</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">Kinh nghiệm</div>
+          <div class="meta-value">${p.base_experience || "-"}</div>
+        </div>
+      </div>
+
+      <h3 class="section-title">CHỈ SỐ CƠ BẢN</h3>
+      <div class="stats-list">
+        ${p.stats.map(s => {
+          const max = 200;
+          const pct = Math.min(100, Math.round((s.base_stat / max) * 100));
+          return `
+            <div class="stat-row">
+              <div class="stat-name">${STAT_VI[s.stat.name] || s.stat.name}</div>
+              <div class="stat-value">${s.base_stat}</div>
+              <div class="stat-bar"><div class="stat-bar-fill" style="width:0%" data-target="${pct}"></div></div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+
+      <h3 class="section-title">KỸ NĂNG ĐẶC BIỆT</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:24px;">
+        ${p.abilities.map(a => `
+          <span style="background:var(--bg-card); border:1px solid var(--border); padding:6px 12px; border-radius:999px; font-size:12px; text-transform:capitalize; color:var(--ink);">
+            ${a.ability.name.replace(/-/g, " ")}${a.is_hidden ? ' <span style="color:var(--gold); font-size:10px;">(ẩn)</span>' : ""}
+          </span>
+        `).join("")}
+      </div>
+
+      ${evoHtml}
+    </div>
+  `;
+
+  // Animate stat bars
+  requestAnimationFrame(() => {
+    modalContent.querySelectorAll(".stat-bar-fill").forEach(el => {
+      el.style.width = el.dataset.target + "%";
+    });
+  });
+}
+
+function flattenEvolution(chain) {
+  const out = [];
+  function walk(node, condition = null) {
+    const id = parseInt(node.species.url.match(/\/pokemon-species\/(\d+)\//)[1], 10);
+    out.push({
+      id,
+      name: node.species.name,
+      condition,
+    });
+    node.evolves_to.forEach(child => {
+      const det = child.evolution_details[0] || {};
+      let cond = null;
+      if (det.min_level) cond = `Lv ${det.min_level}`;
+      else if (det.item) cond = det.item.name.replace(/-/g, " ");
+      else if (det.trigger?.name === "trade") cond = "Trao đổi";
+      else if (det.min_happiness) cond = "Thân thiết";
+      walk(child, cond);
+    });
+  }
+  walk(chain);
+  return out;
+}
+
+modal.addEventListener("click", e => {
+  if (e.target === modal) closeDetail();
+});
+window.openDetail = openDetail;
+
+/* ============================================================
+ * Filters (type chips)
+ * ============================================================ */
+const filtersEl = document.getElementById("filters");
+function buildFilters() {
+  // Language toggle chip — sticks to the left, doesn't act as a type filter
+  const langChip = document.createElement("button");
+  langChip.className = "chip lang-toggle";
+  langChip.textContent = state.lang === "ja" ? "Tên Nhật" : "Tên Anh";
+  langChip.style.color = "var(--gold)";
+  langChip.style.borderColor = "var(--gold)";
+  langChip.title = "Chuyển giữa tên tiếng Nhật (Kim Đồng) và tên tiếng Anh";
+  filtersEl.appendChild(langChip);
+
+  const all = document.createElement("button");
+  all.className = "chip active";
+  all.textContent = "Tất cả";
+  all.dataset.type = "";
+  filtersEl.appendChild(all);
+
+  const forms = document.createElement("button");
+  forms.className = "chip";
+  forms.textContent = "Mega/Forms";
+  forms.dataset.special = "forms";
+  forms.style.color = "var(--gold)";
+  filtersEl.appendChild(forms);
+
+  Object.keys(TYPE_VI).forEach(t => {
+    const c = document.createElement("button");
+    c.className = "chip";
+    c.textContent = TYPE_VI[t];
+    c.dataset.type = t;
+    c.style.color = TYPE_VARS[t];
+    filtersEl.appendChild(c);
+  });
+
+  filtersEl.addEventListener("click", e => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+
+    // Language toggle behaves independently — never marks itself "active" like a filter
+    if (chip.classList.contains("lang-toggle")) {
+      state.lang = state.lang === "ja" ? "en" : "ja";
+      chip.textContent = state.lang === "ja" ? "Tên Nhật" : "Tên Anh";
+      state.page = 0;
+      renderPage(true);
+      return;
+    }
+
+    filtersEl.querySelectorAll(".chip:not(.lang-toggle)").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    if (chip.dataset.special === "forms") {
+      state.formsOnly = true;
+      state.currentTypeFilter = null;
+    } else {
+      state.formsOnly = false;
+      state.currentTypeFilter = chip.dataset.type || null;
+    }
+    state.page = 0;
+    renderPage(true);
+  });
+}
+
+/* ============================================================
+ * Search (text + voice)
+ * ============================================================ */
+const searchInput = document.getElementById("search");
+let searchTimer;
+searchInput.addEventListener("input", e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.currentSearch = e.target.value;
+    state.page = 0;
+    renderPage(true);
+  }, 250);
+});
+
+/* Voice search */
+const micBtn = document.getElementById("micBtn");
+const voiceToast = document.getElementById("voiceToast");
+
+function showToast(text, ms = 2000) {
+  voiceToast.textContent = text;
+  voiceToast.classList.add("show");
+  clearTimeout(voiceToast._t);
+  voiceToast._t = setTimeout(() => voiceToast.classList.remove("show"), ms);
+}
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let listening = false;
+
+if (SR) {
+  recognition = new SR();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 3;
+  // Vietnamese first; will also accept English (Pokémon names mostly Latin)
+  recognition.lang = "vi-VN";
+
+  recognition.onstart = () => {
+    listening = true;
+    micBtn.classList.add("listening");
+    showToast("🎤 Đang nghe... hãy nói tên Pokémon", 4000);
+  };
+
+  recognition.onresult = (event) => {
+    // Try alternatives — pick the one that best matches a Pokémon
+    const alternatives = Array.from(event.results[0]).map(r => r.transcript);
+    const best = pickBestMatch(alternatives);
+    searchInput.value = best.query;
+    state.currentSearch = best.query;
+    state.page = 0;
+    showToast(`🔎 "${best.query}"${best.matched ? ` → ${vietnameseName(best.matched)}` : ""}`, 2200);
+    renderPage(true);
+  };
+
+  recognition.onerror = (event) => {
+    micBtn.classList.remove("listening");
+    listening = false;
+    let msg = "Không nghe được";
+    if (event.error === "not-allowed") msg = "Cần cho phép microphone";
+    else if (event.error === "no-speech") msg = "Không có giọng nói";
+    else if (event.error === "network") msg = "Lỗi mạng";
+    showToast("⚠️ " + msg, 2500);
+  };
+
+  recognition.onend = () => {
+    micBtn.classList.remove("listening");
+    listening = false;
+  };
+
+  micBtn.addEventListener("click", () => {
+    if (listening) {
+      recognition.stop();
+      return;
+    }
+    try {
+      recognition.start();
+    } catch (e) {
+      // start() may throw if called twice
+    }
+  });
+} else {
+  micBtn.addEventListener("click", () => {
+    showToast("⚠️ Trình duyệt không hỗ trợ giọng nói", 2500);
+  });
+  micBtn.style.opacity = 0.5;
+}
+
+/* Match voice transcript to closest Pokémon name */
+function pickBestMatch(alternatives) {
+  const cleaned = alternatives.map(a =>
+    a.toLowerCase()
+      .replace(/[.,!?;:]/g, "")
+      .trim()
+  );
+
+  for (const alt of cleaned) {
+    // Exact name match (English or Vietnamese map)
+    const exactEng = state.allList.find(p => p.name.toLowerCase() === alt);
+    if (exactEng) return { query: alt, matched: exactEng.name };
+
+    // Number match (eg "số 25", "25") — IDs may go up to 5 digits for forms
+    const numMatch = alt.match(/(\d{1,5})/);
+    if (numMatch) {
+      const id = parseInt(numMatch[1], 10);
+      const found = state.allList.find(p => p.id === id);
+      if (found) return { query: String(id), matched: found.name };
+    }
+
+    // Substring match
+    const partial = state.allList.find(p =>
+      p.name.toLowerCase().includes(alt) || alt.includes(p.name.toLowerCase())
+    );
+    if (partial) return { query: partial.name, matched: partial.name };
+
+    // Token-level fuzzy: split words, try each
+    const tokens = alt.split(/\s+/);
+    for (const tok of tokens) {
+      if (tok.length < 3) continue;
+      const m = state.allList.find(p => p.name.toLowerCase().startsWith(tok));
+      if (m) return { query: m.name, matched: m.name };
+    }
+  }
+
+  // Fallback: just use the first transcript
+  return { query: alternatives[0] || "", matched: null };
+}
+
+/* ============================================================
+ * Init
+ * ============================================================ */
+loadMoreBtn.addEventListener("click", async () => {
+  loadMoreBtn.disabled = true;
+  loadMoreBtn.textContent = "Đang tải...";
+  await renderPage(false);
+});
+
+(async function init() {
+  setStatus('<div class="spinner"></div><div style="margin-top:12px;">Đang tải Pokédex...</div>');
+  buildFilters();
+  try {
+    await loadList();
+    clearStatus();
+    await renderPage(true);
+  } catch (e) {
+    console.error("Init error:", e);
+    setStatus(`
+      <div style="font-size:48px;">⚠️</div>
+      <div style="margin-top:8px; font-weight:600;">Không tải được dữ liệu</div>
+      <div style="margin-top:6px; font-size:12px; color:var(--muted); max-width:280px; margin-left:auto; margin-right:auto; line-height:1.5;">
+        Nếu đang mở trong trình duyệt trong app (Facebook, Zalo...), hãy mở bằng Safari / Chrome thật.
+      </div>
+      <button onclick="location.reload()" style="margin-top:16px; padding:10px 24px; background:var(--red); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:700;">Thử lại</button>
+    `);
+  }
+})();
+</script>
+</body>
+</html>
