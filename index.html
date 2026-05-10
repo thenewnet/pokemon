@@ -783,7 +783,7 @@
         <div class="title">POKÉDEX</div>
       </div>
       <div class="search-wrap">
-        <input type="search" id="search" class="search-input" placeholder="Tìm Pokémon... (vd: pikachu, 25)" autocomplete="off" />
+        <input type="search" id="search" class="search-input" placeholder="Tìm: tên, số (25, #150), khoảng (1-151)" autocomplete="off" />
         <button class="mic-btn" id="micBtn" aria-label="Tìm bằng giọng nói" title="Tìm bằng giọng nói">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
         </button>
@@ -952,6 +952,7 @@ const state = {
   page: 0,
   rendered: new Set(),  // ids currently displayed
   lang: "ja",           // "ja" = Japanese romaji (Kim Đồng convention), "en" = English
+  speechLang: "vi",     // "vi" = Vietnamese voice, "en" = English voice (used for spoken name; stats always vi-VN)
 };
 
 const cache = {
@@ -1003,8 +1004,17 @@ const SPEAKER_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="t
 
 function ttsSupported() { return typeof window !== "undefined" && "speechSynthesis" in window; }
 
-// Best BCP-47 lang code for the displayed name based on current language toggle
-function nameLangTag() { return state.lang === "ja" ? "ja-JP" : "en-US"; }
+// BCP-47 lang code for the spoken name. Vietnamese voice pronounces phonetically;
+// English voice gives the closer-to-original Pokémon pronunciation.
+function speechLangTag() { return state.speechLang === "en" ? "en-US" : "vi-VN"; }
+
+// Format the canonical English Pokémon name for speech ("charizard-mega-x" → "Charizard Mega X").
+// Always use the English name regardless of display language so the speech is consistent.
+function spokenName(p) {
+  return p.name.split("-")
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" ");
+}
 
 function speakUtterances(utterances, button) {
   if (!ttsSupported()) {
@@ -1023,14 +1033,14 @@ function speakUtterances(utterances, button) {
 }
 
 function speakName(p, button) {
-  const u = new SpeechSynthesisUtterance(displayName(p));
-  u.lang = nameLangTag();
+  const u = new SpeechSynthesisUtterance(spokenName(p));
+  u.lang = speechLangTag();
   u.rate = 0.9;
   speakUtterances([u], button);
 }
 
 function speakDetailFull(p, button) {
-  const name = displayName(p);
+  const name = spokenName(p);
   const types = p.types.map(t => TYPE_VI[t.type.name] || t.type.name).join(" và ");
   const heightM = (p.height / 10).toFixed(1);
   const weightKg = (p.weight / 10).toFixed(1);
@@ -1039,11 +1049,12 @@ function speakDetailFull(p, button) {
     .join(", ");
 
   const uName = new SpeechSynthesisUtterance(name);
-  uName.lang = nameLangTag();
+  uName.lang = speechLangTag();
   uName.rate = 0.9;
 
+  // Stats are Vietnamese phrases regardless of name-language choice
   const uInfo = new SpeechSynthesisUtterance(
-    `Hệ ${types}. Chiều cao ${heightM} mét. Cân nặng ${weightKg} ki lô gam. ` +
+    `Số ${p.id}. Hệ ${types}. Chiều cao ${heightM} mét. Cân nặng ${weightKg} ki lô gam. ` +
     `Chỉ số cơ bản: ${statsText}.`
   );
   uInfo.lang = "vi-VN";
@@ -1196,9 +1207,19 @@ function getFilteredList() {
   if (state.formsOnly) list = list.filter(p => p.id > 10000);
   const q = state.currentSearch.trim().toLowerCase();
   if (q) {
-    // Match by id (number) or by english name (prefix match)
-    if (/^\d+$/.test(q)) {
-      const id = parseInt(q, 10);
+    // Strip a leading "#" so "#25" works the same as "25"
+    const numQuery = q.replace(/^#/, "").trim();
+
+    // Range search: "1-151", "1 - 151", "151-1" all match the inclusive range
+    const rangeMatch = numQuery.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (rangeMatch) {
+      let lo = parseInt(rangeMatch[1], 10);
+      let hi = parseInt(rangeMatch[2], 10);
+      if (lo > hi) [lo, hi] = [hi, lo];
+      list = list.filter(p => p.id >= lo && p.id <= hi);
+    } else if (/^\d+$/.test(numQuery)) {
+      // Exact ID match
+      const id = parseInt(numQuery, 10);
       list = list.filter(p => p.id === id);
     } else {
       list = list.filter(p => {
@@ -1618,7 +1639,7 @@ function buildFilters() {
     return c;
   };
 
-  // Language toggle chip — sticks to the left, doesn't act as a type filter
+  // Display-language toggle chip (Japanese romaji / English) — doesn't act as a filter
   const langChip = makeChip(
     state.lang === "ja" ? "あ" : "A",
     state.lang === "ja" ? "Tên Nhật" : "Tên Anh",
@@ -1630,6 +1651,19 @@ function buildFilters() {
     }
   );
   filtersEl.appendChild(langChip);
+
+  // Speech-language toggle chip (Vietnamese / English) — controls TTS voice for the name
+  const speechChip = makeChip(
+    "🔊",
+    state.speechLang === "vi" ? "Đọc VN" : "Đọc EN",
+    {
+      extraClass: "speech-toggle",
+      color: "var(--gold)",
+      borderColor: "var(--gold)",
+      title: "Chuyển giọng đọc tên Pokémon (Việt / Anh). Thông số luôn đọc tiếng Việt.",
+    }
+  );
+  filtersEl.appendChild(speechChip);
 
   const all = makeChip("⭐", "Tất cả", { type: "" });
   all.classList.add("active");
@@ -1658,6 +1692,16 @@ function buildFilters() {
       if (label) label.textContent = state.lang === "ja" ? "Tên Nhật" : "Tên Anh";
       state.page = 0;
       renderPage(true);
+      return;
+    }
+
+    // Speech-language toggle — only changes future TTS, no re-render needed
+    if (chip.classList.contains("speech-toggle")) {
+      state.speechLang = state.speechLang === "vi" ? "en" : "vi";
+      const label = chip.querySelector(".chip-label");
+      if (label) label.textContent = state.speechLang === "vi" ? "Đọc VN" : "Đọc EN";
+      // Stop any ongoing speech so the next click uses the new voice
+      if (ttsSupported()) speechSynthesis.cancel();
       return;
     }
 
