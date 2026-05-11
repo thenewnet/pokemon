@@ -1000,8 +1000,8 @@ const cache = {
   pokemon: new Map(),
   species: new Map(),
   evolution: new Map(),
-  romaji: new Map(),       // species ID -> romaji name (e.g. 136 -> "Booster" for Flareon)
-  translation: new Map(),  // English text -> Vietnamese translation
+  romaji: new Map(),    // species ID -> romaji name (e.g. 136 -> "Booster" for Flareon)
+  english: new Map(),   // species ID -> canonical English name (e.g. 122 -> "Mr. Mime", 250 -> "Ho-Oh")
 };
 
 /* ============================================================
@@ -1018,23 +1018,27 @@ function speciesIdOf(p) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-// Display name following user's chosen language. For Japanese: pulls romaji from PokéAPI species
-// (matches the convention used by NXB Kim Đồng's Pokémon manga, e.g. Flareon → "Booster").
+// Display name following user's chosen language.
+//   "ja": romaji from PokéAPI species (Kim Đồng manga convention, e.g. Flareon → "Booster").
+//   "en": canonical English name from PokéAPI species (e.g. "Mr. Mime", "Ho-Oh", "Farfetch'd"),
+//         which preserves punctuation that the slug-based API name strips out.
 function displayName(p) {
+  const sid = speciesIdOf(p);
+  const isForm = p.id > 10000;
+  const formSuffix = () => {
+    if (!isForm) return "";
+    const formParts = p.name.split("-").slice(1);
+    if (!formParts.length) return "";
+    const formText = formParts.map(s => FORM_VI[s] || (s.charAt(0).toUpperCase() + s.slice(1))).join(" ");
+    return ` (${formText})`;
+  };
+
   if (state.lang === "ja") {
-    const sid = speciesIdOf(p);
     const roma = sid != null ? cache.romaji.get(sid) : null;
-    if (roma) {
-      // Forms (ID > 10000) share their parent species' romaji — append the form suffix
-      if (p.id > 10000) {
-        const formParts = p.name.split("-").slice(1);
-        if (formParts.length) {
-          const formText = formParts.map(s => FORM_VI[s] || (s.charAt(0).toUpperCase() + s.slice(1))).join(" ");
-          return `${roma} (${formText})`;
-        }
-      }
-      return roma;
-    }
+    if (roma) return roma + formSuffix();
+  } else if (state.lang === "en") {
+    const eng = sid != null ? cache.english.get(sid) : null;
+    if (eng) return eng + formSuffix();
   }
   return vietnameseName(p.name);
 }
@@ -1050,9 +1054,22 @@ function ttsSupported() { return typeof window !== "undefined" && "speechSynthes
 // English voice gives the closer-to-original Pokémon pronunciation.
 function speechLangTag() { return state.speechLang === "en" ? "en-US" : "vi-VN"; }
 
-// Format the canonical English Pokémon name for speech ("charizard-mega-x" → "Charizard Mega X").
-// Always use the English name regardless of display language so the speech is consistent.
+// Format the canonical English Pokémon name for speech. Prefer the cached PokéAPI English
+// name (e.g. "Mr. Mime", "Ho-Oh", "Farfetch'd") so TTS pronounces it correctly; fall back to
+// slug-derived capitalization ("charizard-mega-x" → "Charizard Mega X") when not yet cached.
 function spokenName(p) {
+  const sid = speciesIdOf(p);
+  const eng = sid != null ? cache.english.get(sid) : null;
+  if (eng) {
+    if (p.id > 10000) {
+      const formParts = p.name.split("-").slice(1);
+      if (formParts.length) {
+        const formText = formParts.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+        return `${eng} ${formText}`;
+      }
+    }
+    return eng;
+  }
   return p.name.split("-")
     .map(s => s.charAt(0).toUpperCase() + s.slice(1))
     .join(" ");
@@ -1154,13 +1171,16 @@ async function translateToVietnamese(text) {
   return null;
 }
 
-// Bulk-fetch species → cache romaji name. Skips already-cached IDs.
-async function loadRomajiFor(details) {
+// Bulk-fetch species → cache canonical names (romaji + English). Skips already-cached IDs.
+// English name from PokéAPI is the properly formatted form (e.g. "Mr. Mime", "Ho-Oh",
+// "Farfetch'd", "Porygon-Z", "Nidoran♀"), which the API slug ("mr-mime", "ho-oh") lacks.
+async function loadSpeciesNamesFor(details) {
   const ids = new Set();
   for (const p of details) {
     if (!p) continue;
     const sid = speciesIdOf(p);
-    if (sid != null && !cache.romaji.has(sid)) ids.add(sid);
+    if (sid == null) continue;
+    if (!cache.romaji.has(sid) || !cache.english.has(sid)) ids.add(sid);
   }
   if (ids.size === 0) return;
   await Promise.all([...ids].map(async id => {
@@ -1168,6 +1188,8 @@ async function loadRomajiFor(details) {
       const sp = await fetchJSON(`${API}/pokemon-species/${id}`, cache.species);
       const roma = sp.names.find(n => n.language.name === "ja-roma")?.name;
       if (roma) cache.romaji.set(id, roma);
+      const eng = sp.names.find(n => n.language.name === "en")?.name;
+      if (eng) cache.english.set(id, eng);
     } catch {}
   }));
 }
@@ -1310,11 +1332,13 @@ function getFilteredList() {
       list = list.filter(p => {
         if (p.name.toLowerCase().includes(q)) return true;
         if (vietnameseName(p.name).toLowerCase().includes(q)) return true;
-        // Match by romaji once it's cached (Pokémon must have been loaded once)
+        // Match by romaji / canonical English once cached (Pokémon must have been loaded once)
         const sid = p.id > 10000 ? null : p.id;
         if (sid != null) {
           const roma = cache.romaji.get(sid);
           if (roma && roma.toLowerCase().includes(q)) return true;
+          const eng = cache.english.get(sid);
+          if (eng && eng.toLowerCase().includes(q)) return true;
         }
         return false;
       });
@@ -1368,8 +1392,9 @@ async function renderPage(reset = false) {
     })
   );
 
-  // Pull romaji names for the page so cards render with Kim Đồng-style names
-  if (state.lang === "ja") await loadRomajiFor(details);
+  // Pull canonical species names (romaji + English) for the page. Needed for display in
+  // both ja/en modes and for accurate TTS pronunciation regardless of display language.
+  await loadSpeciesNamesFor(details);
 
   // Replace skeletons with real cards
   details.forEach((d, i) => {
@@ -1438,7 +1463,7 @@ async function renderByType(list, reset) {
   const details = await Promise.all(
     slice.map(p => loadPokemonDetail(p.id).catch(() => null))
   );
-  if (state.lang === "ja") await loadRomajiFor(details);
+  await loadSpeciesNamesFor(details);
   details.forEach((d, i) => {
     if (!d) { skeletons[i].remove(); return; }
     skeletons[i].replaceWith(buildCard(d));
@@ -1521,21 +1546,25 @@ async function openDetail(id) {
     // Forms (ID 10001+) share their parent species — resolve via the URL embedded in the Pokémon detail
     let sp = null;
     try { sp = await fetchJSON(p.species.url, cache.species); } catch { /* render without species */ }
-    // Cache romaji name for this species so any other view of it (incl. evolution stages) picks it up
+    // Cache canonical names for this species so any other view of it (incl. evolution stages) picks them up
     if (sp) {
       const sid = speciesIdOf(p);
-      const roma = sp.names.find(n => n.language.name === "ja-roma")?.name;
-      if (sid != null && roma) cache.romaji.set(sid, roma);
+      if (sid != null) {
+        const roma = sp.names.find(n => n.language.name === "ja-roma")?.name;
+        if (roma) cache.romaji.set(sid, roma);
+        const eng = sp.names.find(n => n.language.name === "en")?.name;
+        if (eng) cache.english.set(sid, eng);
+      }
     }
     let evoChain = null;
     if (sp?.evolution_chain?.url) {
       try { evoChain = await loadEvolutionChain(sp.evolution_chain.url); } catch {}
     }
-    // Pre-cache romaji for evolution stages too, so the evo strip shows correct names
-    if (state.lang === "ja" && evoChain) {
+    // Pre-cache canonical names for evolution stages so the evo strip shows correct names in any language
+    if (evoChain) {
       const stageIds = flattenEvolution(evoChain.chain).map(s => s.id);
       const fakeDetails = stageIds.map(id => ({ id, species: { url: `${API}/pokemon-species/${id}/` } }));
-      await loadRomajiFor(fakeDetails);
+      await loadSpeciesNamesFor(fakeDetails);
     }
     renderDetail(p, sp, evoChain);
   } catch (e) {
