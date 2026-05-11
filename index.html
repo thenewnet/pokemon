@@ -620,16 +620,57 @@
   }
 
   .desc-text {
+    position: relative;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-left: 4px solid var(--red);
-    padding: 12px 14px;
+    padding: 12px 50px 12px 14px;
     border-radius: 4px;
     font-size: 13px;
     line-height: 1.6;
     color: var(--ink);
     margin-bottom: 24px;
     font-style: italic;
+  }
+  .desc-text .desc-speak-btn {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 34px; height: 34px;
+    background: rgba(255,255,255,0.08);
+  }
+  .desc-text .desc-speak-btn svg { width: 16px; height: 16px; }
+  .desc-loading {
+    display: inline-block;
+    color: var(--muted);
+    font-style: italic;
+    font-size: 12px;
+  }
+  .desc-loading::after {
+    content: "...";
+    display: inline-block;
+    animation: dots 1.4s infinite;
+  }
+  @keyframes dots {
+    0%, 20% { content: "."; }
+    40% { content: ".."; }
+    60%, 100% { content: "..."; }
+  }
+  .desc-genus {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-style: normal;
+    font-size: 11px;
+  }
+  .desc-en {
+    display: block;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    font-style: normal;
+    opacity: 0.75;
   }
 
   /* Evolution chain */
@@ -1083,9 +1124,52 @@ function speakDetailFull(p, button) {
 
 // Stash the currently-shown Pokémon so the inline modal button can find it
 let currentDetailPokemon = null;
+let currentDescVi = "";   // Vietnamese-translated description for the open detail modal
+let currentDescEn = "";   // Original English fallback
 window.speakCurrentDetail = function (btn) {
   if (currentDetailPokemon) speakDetailFull(currentDetailPokemon, btn);
 };
+window.speakCurrentDesc = function (btn) {
+  const text = currentDescVi || currentDescEn;
+  if (!text) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = currentDescVi ? "vi-VN" : "en-US";
+  u.rate = 1.0;
+  speakUtterances([u], btn);
+};
+
+/* ============================================================
+ * Translation (MyMemory, free, no API key — supports CORS)
+ * Caches in-memory + localStorage to avoid re-hitting the rate limit.
+ * ============================================================ */
+async function translateToVietnamese(text) {
+  if (!text) return null;
+  if (cache.translation.has(text)) return cache.translation.get(text);
+  const lsKey = `tr_vi::${text}`;
+  const persisted = lsGet(lsKey);
+  if (persisted) {
+    cache.translation.set(text, persisted);
+    return persisted;
+  }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|vi`,
+      { signal: ctrl.signal }
+    );
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText;
+    if (translated && typeof translated === "string" && translated.trim()) {
+      cache.translation.set(text, translated);
+      lsSet(lsKey, translated);
+      return translated;
+    }
+  } catch {}
+  return null;
+}
 
 // Bulk-fetch species → cache canonical names (romaji + English). Skips already-cached IDs.
 // English name from PokéAPI is the properly formatted form (e.g. "Mr. Mime", "Ho-Oh",
@@ -1499,11 +1583,15 @@ function closeDetail() {
   document.body.style.overflow = "";
   if (ttsSupported()) speechSynthesis.cancel();
   currentDetailPokemon = null;
+  currentDescVi = "";
+  currentDescEn = "";
 }
 window.closeDetail = closeDetail;
 
 function renderDetail(p, sp, evoChain) {
   currentDetailPokemon = p;
+  currentDescVi = "";
+  currentDescEn = "";
   const primaryType = p.types[0]?.type.name || "normal";
   const color = TYPE_VARS[primaryType];
   const heroBg = `linear-gradient(135deg, ${color}, ${color}99 50%, ${color}66)`;
@@ -1567,7 +1655,13 @@ function renderDetail(p, sp, evoChain) {
     </div>
 
     <div class="detail-body">
-      ${descText ? `<div class="desc-text">${descText}${genusEn ? ` <span style="display:block; margin-top:6px; color:var(--muted); font-style:normal; font-size:11px;">— ${genusEn}</span>` : ""}</div>` : ""}
+      ${descText ? `
+        <div class="desc-text">
+          <button class="speak-btn desc-speak-btn" onclick="speakCurrentDesc(this)" title="Đọc giới thiệu" aria-label="Đọc giới thiệu">${SPEAKER_SVG}</button>
+          <div class="desc-content" id="descContent"><span class="desc-loading">Đang dịch</span></div>
+          ${genusEn ? `<span class="desc-genus">— ${genusEn}</span>` : ""}
+        </div>
+      ` : ""}
 
       <h3 class="section-title">THÔNG SỐ</h3>
       <div class="meta-grid">
@@ -1619,6 +1713,25 @@ function renderDetail(p, sp, evoChain) {
       el.style.width = el.dataset.target + "%";
     });
   });
+
+  // Async-translate the description (English → Vietnamese) and replace the placeholder
+  if (descText) {
+    currentDescEn = descText;
+    const targetPokemonId = p.id;
+    translateToVietnamese(descText).then(vi => {
+      // Bail if user navigated away or opened a different Pokémon meanwhile
+      if (!currentDetailPokemon || currentDetailPokemon.id !== targetPokemonId) return;
+      const target = document.getElementById("descContent");
+      if (!target) return;
+      if (vi) {
+        currentDescVi = vi;
+        target.innerHTML = `${vi}<span class="desc-en">EN: ${descText}</span>`;
+      } else {
+        // Translation failed — show original English so the loa button still works
+        target.textContent = descText;
+      }
+    });
+  }
 }
 
 function flattenEvolution(chain) {
